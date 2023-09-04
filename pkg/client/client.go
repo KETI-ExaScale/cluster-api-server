@@ -6,6 +6,8 @@ import (
 	"k8s.io/klog"
 )
 
+const HOSTSERVERPORT = ":9091"
+
 func NewClient() kubernetes.Interface {
 	config, err := rest.InClusterConfig()
 	if err != nil {

@@ -2,14 +2,17 @@ package rest
 
 import (
 	"cluster-api-server/pkg/client"
+	"cluster-api-server/pkg/client/metric"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"google.golang.org/grpc"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
@@ -24,15 +27,15 @@ type Response struct {
 }
 
 type ClusterResponse struct {
-	ClusterName string `json:"clusterName"`
-	MasterNode  string `json:"masterNode"`
-	Nodes       string `json:"nodes"`
-	TotalGPU    string `json:"totalGPU"`
+	ClusterName string   `json:"clusterName"`
+	MasterNode  string   `json:"masterNode"`
+	Nodes       []string `json:"nodes"`
+	TotalGPU    string   `json:"totalGPU"`
 }
 
 type NodeResponse struct {
 	ClusterName string         `json:"clusterName"`
-	VirtualGPU  string         `json:"virtualGPU"`
+	VirtualGPU  int32          `json:"virtualGPU"`
 	Age         string         `json:"age"`
 	GpuPods     map[string]int `json:"gpuPods"`
 }
@@ -117,16 +120,51 @@ func (ClusterResource) Uri() string {
 func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.Params) Response {
 	clusterName := ps.ByName("clusterName")
 
+	res := &ClusterResponse{
+		ClusterName: clusterName,
+		Nodes:       make([]string, 0),
+	}
+	totalGPU := int32(0)
 	nodeList, err := kubeClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		klog.Errorln(err)
 	}
 
 	for _, node := range nodeList.Items {
-		node.Labels["clusterName"] = clusterName
-		_, updateErr := kubeClient.CoreV1().Nodes().Update(context.TODO(), &node, metav1.UpdateOptions{})
+		res.Nodes = append(res.Nodes, node.Name)
+		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
+			res.MasterNode = node.Name
+		}
+		if _, ok := node.Labels["clusterName"]; !ok {
+			node.Labels["clusterName"] = clusterName
+			_, updateErr := kubeClient.CoreV1().Nodes().Update(context.TODO(), &node, metav1.UpdateOptions{})
+			if updateErr != nil {
+				klog.Errorln(updateErr)
+			}
+		}
+		nodeIP := ""
+		for _, address := range node.Status.Addresses {
+			if address.Type == corev1.NodeInternalIP {
+				nodeIP = address.Address
+			}
+		}
+		conn, err := grpc.Dial(nodeIP + client.HOSTSERVERPORT)
+		if err != nil {
+			klog.Errorln(err)
+		}
+		defer conn.Close()
+		req := &client.Request{ClusterName: clusterName}
+		travelClient := client.NewTravelerClient(conn)
+		res, err := travelClient.Node(context.Background(), req)
+		if err != nil {
+			klog.Errorln(err)
+		}
+		if res.GPU > 0 {
+			node.Labels["gpu"] = "on"
+		}
+		totalGPU += res.GPU
 	}
-	return Response{200, "", mres}
+	return Response{200, "", res}
 }
 
 // /node/:nodeName
@@ -141,32 +179,104 @@ func (NodeResource) Uri() string {
 }
 
 func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.Params) Response {
-	st := time.Now().Format(time.ANSIC)
-	mres := &MigrationResponse{}
-	mres.MigrationStartTime = st
-	mres.MigrationSource = make([]string, 0)
-	body, err := ioutil.ReadAll(r.Body)
+	nodeName := ps.ByName("nodeName")
+	clusterName := ""
+
+	res := &NodeResponse{
+		GpuPods: make(map[string]int),
+	}
+	node, err := kubeClient.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
 		klog.Errorln(err)
 	}
-	req := SetRequest(body)
-	scn := req.Source.ClusterName + "/" + req.Source.NodeName
-	fcn := req.Target.ClusterName + "/" + req.Target.NodeName
-	// 디플로이먼트 탐색
-	mres.MigrationSource = setSource(req.Source.ClusterName, req.Source.DepName)
-	// request Migration 사용해야함
-	migrationRequest(*req, mres.MigrationSource, req.Source.DepName)
-	// time.Sleep(time.Second * 1)
-	time.Sleep(time.Second * 5)
+	res.ClusterName = node.Labels["clusterName"]
 
-	ft := time.Now().Format(time.ANSIC)
-	mres.MigrationStartCN = scn
-	mres.MigrationFinishCN = fcn
-	mres.MigrationFinishTime = ft
-	// resb, err := json.Marshal(mres)
-	// if err != nil {
-	// 	klog.Errorln(err)
-	// }
+	nodeIP := ""
+	for _, address := range node.Status.Addresses {
+		if address.Type == corev1.NodeInternalIP {
+			nodeIP = address.Address
+		}
+	}
+	conn, err := grpc.Dial(nodeIP + client.HOSTSERVERPORT)
+	if err != nil {
+		klog.Errorln(err)
+	}
+	defer conn.Close()
+	req := &client.Request{ClusterName: clusterName}
+	travelClient := client.NewTravelerClient(conn)
+	nodegpures, err := travelClient.Node(context.Background(), req)
+	if err != nil {
+		klog.Errorln(err)
+	}
+	res.Age = time.Since(node.ObjectMeta.CreationTimestamp.Time).String()
+	res.VirtualGPU = nodegpures.GPU * 20
 
-	return Response{200, "", mres}
+	podList, err := kubeClient.CoreV1().Pods(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{FieldSelector: "spec.nodeName=" + nodeName})
+	if err != nil {
+		klog.Errorln(err)
+	}
+
+	for _, pod := range podList.Items {
+		for _, container := range pod.Spec.Containers {
+			quantity := container.Resources.Limits["nvidia.com/gpu"]
+			gpuCount, _ := quantity.AsInt64()
+			res.GpuPods[pod.Name] += int(gpuCount)
+		}
+	}
+	return Response{200, "", res}
+}
+
+// /node/:nodeName/metrics
+type NodeMetricResource struct {
+	PostNotSupported
+	PutNotSupported
+	DeleteNotSupported
+}
+
+func (NodeMetricResource) Uri() string {
+	return "/node/:nodeName/metrics"
+}
+
+func (NodeMetricResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.Params) Response {
+	nodeName := ps.ByName("nodeName")
+	podIP := ""
+
+	podList, err := kubeClient.CoreV1().Pods("keti-system").List(context.Background(), metav1.ListOptions{
+		FieldSelector: "spec.nodeName=" + nodeName,
+	})
+	if err != nil {
+		klog.Errorln(err)
+	}
+
+	for _, pod := range podList.Items {
+		if strings.Contains(pod.Name, "metric-collector") {
+			podIP = strings.ReplaceAll(pod.Status.PodIP, ".", "-")
+		}
+	}
+
+	conn, err := grpc.Dial(podIP + ".keti-system.pod.cluster.local:50051")
+	if err != nil {
+		klog.Errorln(err)
+	}
+	defer conn.Close()
+	req := &metric.Request{}
+	metricClient := metric.NewMetricGathererClient(conn)
+	node, err := kubeClient.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorln(err)
+	}
+	grpcRes := &metric.Response{}
+	if strings.Compare(node.Labels["gpu"], "on") == 0 {
+		grpcRes, err = metricClient.GPU(context.Background(), req)
+		if err != nil {
+			klog.Errorln(err)
+		}
+	} else {
+		grpcRes, err = metricClient.Node(context.Background(), req)
+		if err != nil {
+			klog.Errorln(err)
+		}
+	}
+
+	return Response{200, "", metric.Convert(grpcRes)}
 }
