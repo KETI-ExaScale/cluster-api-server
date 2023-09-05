@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-api-server
+  namespace: keti-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cluster-api-server
+  template:
+    metadata:
+      labels:
+        name: cluster-api-server
+        namespace: keti-system
+    spec:
+      serviceAccountName: cluster-api-server
+      containers:
+        - name: cluster-api-server
+          # Replace this with the built image name
+          image: ketidevit2/exascale.cluster-api-server:latest
+          command:
+          - cluster-api-server
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+      imagePullSecrets:
+      - name: keti-user

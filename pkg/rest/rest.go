@@ -34,10 +34,11 @@ type ClusterResponse struct {
 }
 
 type NodeResponse struct {
-	ClusterName string         `json:"clusterName"`
-	VirtualGPU  int32          `json:"virtualGPU"`
-	Age         string         `json:"age"`
-	GpuPods     map[string]int `json:"gpuPods"`
+	ClusterName    string         `json:"clusterName"`
+	VirtualGPU     int32          `json:"virtualGPU"`
+	Age            string         `json:"age"`
+	GpuPods        map[string]int `json:"gpuPods"`
+	GpuPodForPrint map[int]string `json:"gpuPodForPrint"`
 }
 type Resource interface {
 	Uri() string
@@ -215,12 +216,16 @@ func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.P
 	if err != nil {
 		klog.Errorln(err)
 	}
-
+	currentGPU := 0
 	for _, pod := range podList.Items {
 		for _, container := range pod.Spec.Containers {
 			quantity := container.Resources.Limits["nvidia.com/gpu"]
 			gpuCount, _ := quantity.AsInt64()
 			res.GpuPods[pod.Name] += int(gpuCount)
+			for i := 0; i < int(gpuCount); i++ {
+				res.GpuPodForPrint[currentGPU] = pod.Name
+				currentGPU++
+			}
 		}
 	}
 	return Response{200, "", res}

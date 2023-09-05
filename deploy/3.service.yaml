@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-api-server
+  namespace: keti-system
+  labels:
+    name: cluster-api-server
+spec:
+  type: NodePort
+  ports:
+  - port: 30850
+    targetPort: 30850
+    nodePort: 30850
+    protocol: TCP
+  selector:
+    name: cluster-api-server
