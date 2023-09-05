@@ -3,6 +3,7 @@ package rest
 import (
 	"cluster-api-server/pkg/client"
 	"cluster-api-server/pkg/client/metric"
+	"cluster-api-server/pkg/util"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -212,7 +213,7 @@ func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.P
 	if err != nil {
 		klog.Errorln(err)
 	}
-	res.Age = time.Since(node.ObjectMeta.CreationTimestamp.Time).String()
+	res.Age = util.PrettyDuration(time.Since(node.ObjectMeta.CreationTimestamp.Time))
 	res.VirtualGPU = nodegpures.GPU * 20
 
 	podList, err := kubeClient.CoreV1().Pods(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{FieldSelector: "spec.nodeName=" + nodeName})
@@ -249,6 +250,8 @@ func (NodeMetricResource) Get(rw http.ResponseWriter, r *http.Request, ps httpro
 	nodeName := ps.ByName("nodeName")
 	podIP := ""
 
+	klog.Infoln("NodeName:", nodeName)
+
 	podList, err := kubeClient.CoreV1().Pods("keti-system").List(context.Background(), metav1.ListOptions{
 		FieldSelector: "spec.nodeName=" + nodeName,
 	})
@@ -258,11 +261,14 @@ func (NodeMetricResource) Get(rw http.ResponseWriter, r *http.Request, ps httpro
 
 	for _, pod := range podList.Items {
 		if strings.Contains(pod.Name, "metric-collector") {
-			podIP = strings.ReplaceAll(pod.Status.PodIP, ".", "-")
+			//podIP = strings.ReplaceAll(pod.Status.PodIP, ".", "-")
+			podIP = pod.Status.PodIP
+			klog.Infoln("PodName:", pod.Name)
+			klog.Infoln("PodIP:", pod.Status.PodIP)
 		}
 	}
-
-	conn, err := grpc.Dial(podIP+".keti-system.pod.cluster.local:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	klog.Infoln("RequestDNS:", podIP+":50051")
+	conn, err := grpc.Dial(podIP+":50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		klog.Errorln(err)
 	}

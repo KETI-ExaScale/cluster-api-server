@@ -35,13 +35,13 @@ func Convert(grpcres *Response) *MetricResponse {
 	networkTXVal := grpcres.Message[NETWORKTXTAG].Metric[0]
 
 	return &MetricResponse{
-		GPUCore:   fmt.Sprint(gpuCoreVal.Gauge.GetValue()),
-		GPUMemory: fmt.Sprint(gpuMemoryVal.Gauge.GetValue()),
-		GPUPower:  fmt.Sprint(gpuPowerVal.Gauge.GetValue()),
-		CPUCore:   fmt.Sprint(cpuCoreVal.Gauge.GetValue()),
-		Memory:    fmt.Sprint(memoryVal.Gauge.GetValue()),
-		Storage:   fmt.Sprint(storageVal.Gauge.GetValue()),
-		NetworkRX: fmt.Sprint(networkRXVal.Gauge.GetValue()),
-		NetworkTX: fmt.Sprint(networkTXVal.Gauge.GetValue()),
+		GPUCore:   fmt.Sprintf("%.2f", gpuCoreVal.Gauge.GetValue()),
+		GPUMemory: fmt.Sprintf("%.2f", gpuMemoryVal.Gauge.GetValue()),
+		GPUPower:  fmt.Sprintf("%.2f", gpuPowerVal.Gauge.GetValue()),
+		CPUCore:   fmt.Sprintf("%.2f", cpuCoreVal.Gauge.GetValue()),
+		Memory:    fmt.Sprintf("%.2f", memoryVal.Gauge.GetValue()),
+		Storage:   fmt.Sprintf("%.2f", storageVal.Gauge.GetValue()),
+		NetworkRX: fmt.Sprintf("%.2f", networkRXVal.Gauge.GetValue()),
+		NetworkTX: fmt.Sprintf("%.2f", networkTXVal.Gauge.GetValue()),
 	}
 }
