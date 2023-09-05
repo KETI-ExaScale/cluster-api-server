@@ -125,15 +125,15 @@ func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httproute
 	response := &ClusterResponse{
 		ClusterName: clusterName,
 		Nodes:       make([]string, 0),
+		TotalGPU:    0,
 	}
 	nodeList, err := kubeClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		klog.Errorln(err)
 	}
-
 	for _, node := range nodeList.Items {
 		response.Nodes = append(response.Nodes, node.Name)
-		response.TotalGPU = 0
+
 		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
 			response.MasterNode = node.Name
 		}
