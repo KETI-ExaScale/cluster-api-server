@@ -12,6 +12,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -149,7 +150,7 @@ func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httproute
 				nodeIP = address.Address
 			}
 		}
-		conn, err := grpc.Dial(nodeIP + client.HOSTSERVERPORT)
+		conn, err := grpc.Dial(nodeIP+client.HOSTSERVERPORT, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			klog.Errorln(err)
 		}
@@ -270,7 +271,9 @@ func (NodeMetricResource) Get(rw http.ResponseWriter, r *http.Request, ps httpro
 	if err != nil {
 		klog.Errorln(err)
 	}
-	grpcRes := &metric.Response{}
+
+	var grpcRes *metric.Response
+
 	if strings.Compare(node.Labels["gpu"], "on") == 0 {
 		grpcRes, err = metricClient.GPU(context.Background(), req)
 		if err != nil {
