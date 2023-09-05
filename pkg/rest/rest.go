@@ -31,7 +31,7 @@ type ClusterResponse struct {
 	ClusterName string   `json:"clusterName"`
 	MasterNode  string   `json:"masterNode"`
 	Nodes       []string `json:"nodes"`
-	TotalGPU    string   `json:"totalGPU"`
+	TotalGPU    int32    `json:"totalGPU"`
 }
 
 type NodeResponse struct {
@@ -122,20 +122,20 @@ func (ClusterResource) Uri() string {
 func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.Params) Response {
 	clusterName := ps.ByName("clusterName")
 
-	res := &ClusterResponse{
+	response := &ClusterResponse{
 		ClusterName: clusterName,
 		Nodes:       make([]string, 0),
 	}
-	totalGPU := int32(0)
 	nodeList, err := kubeClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		klog.Errorln(err)
 	}
 
 	for _, node := range nodeList.Items {
-		res.Nodes = append(res.Nodes, node.Name)
+		response.Nodes = append(response.Nodes, node.Name)
+		response.TotalGPU = 0
 		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
-			res.MasterNode = node.Name
+			response.MasterNode = node.Name
 		}
 		if _, ok := node.Labels["clusterName"]; !ok {
 			node.Labels["clusterName"] = clusterName
@@ -164,9 +164,10 @@ func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httproute
 		if res.GPU > 0 {
 			node.Labels["gpu"] = "on"
 		}
-		totalGPU += res.GPU
+		klog.Infoln(node.Name, "GPU Count :", res.GPU)
+		response.TotalGPU += res.GPU
 	}
-	return Response{200, "", res}
+	return Response{200, "", response}
 }
 
 // /node/:nodeName
