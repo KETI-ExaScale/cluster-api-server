@@ -200,7 +200,7 @@ func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.P
 			nodeIP = address.Address
 		}
 	}
-	conn, err := grpc.Dial(nodeIP + client.HOSTSERVERPORT)
+	conn, err := grpc.Dial(nodeIP+client.HOSTSERVERPORT, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		klog.Errorln(err)
 	}
@@ -261,7 +261,7 @@ func (NodeMetricResource) Get(rw http.ResponseWriter, r *http.Request, ps httpro
 		}
 	}
 
-	conn, err := grpc.Dial(podIP + ".keti-system.pod.cluster.local:50051")
+	conn, err := grpc.Dial(podIP+".keti-system.pod.cluster.local:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		klog.Errorln(err)
 	}
