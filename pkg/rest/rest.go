@@ -154,7 +154,7 @@ func (ClusterResource) Get(rw http.ResponseWriter, r *http.Request, ps httproute
 			klog.Errorln(err)
 		}
 		defer conn.Close()
-		req := &client.Request{ClusterName: clusterName}
+		req := &client.NodeRequest{ClusterName: clusterName}
 		travelClient := client.NewTravelerClient(conn)
 		res, err := travelClient.Node(context.Background(), req)
 		if err != nil {
@@ -203,7 +203,7 @@ func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.P
 		klog.Errorln(err)
 	}
 	defer conn.Close()
-	req := &client.Request{ClusterName: clusterName}
+	req := &client.NodeRequest{ClusterName: clusterName}
 	travelClient := client.NewTravelerClient(conn)
 	nodegpures, err := travelClient.Node(context.Background(), req)
 	if err != nil {

@@ -22,7 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TravelerClient interface {
-	Node(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
+	Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*NodeResponse, error)
 	Delete(ctx context.Context, in *DockerRequest, opts ...grpc.CallOption) (*DockerResponse, error)
 }
 
@@ -34,8 +34,8 @@ func NewTravelerClient(cc grpc.ClientConnInterface) TravelerClient {
 	return &travelerClient{cc}
 }
 
-func (c *travelerClient) Node(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
-	out := new(Response)
+func (c *travelerClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*NodeResponse, error) {
+	out := new(NodeResponse)
 	err := c.cc.Invoke(ctx, "/grpc.Traveler/Node", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func (c *travelerClient) Delete(ctx context.Context, in *DockerRequest, opts ...
 // All implementations must embed UnimplementedTravelerServer
 // for forward compatibility
 type TravelerServer interface {
-	Node(context.Context, *Request) (*Response, error)
+	Node(context.Context, *NodeRequest) (*NodeResponse, error)
 	Delete(context.Context, *DockerRequest) (*DockerResponse, error)
 	mustEmbedUnimplementedTravelerServer()
 }
@@ -65,7 +65,7 @@ type TravelerServer interface {
 type UnimplementedTravelerServer struct {
 }
 
-func (UnimplementedTravelerServer) Node(context.Context, *Request) (*Response, error) {
+func (UnimplementedTravelerServer) Node(context.Context, *NodeRequest) (*NodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Node not implemented")
 }
 func (UnimplementedTravelerServer) Delete(context.Context, *DockerRequest) (*DockerResponse, error) {
@@ -85,7 +85,7 @@ func RegisterTravelerServer(s grpc.ServiceRegistrar, srv TravelerServer) {
 }
 
 func _Traveler_Node_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Request)
+	in := new(NodeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func _Traveler_Node_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/grpc.Traveler/Node",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TravelerServer).Node(ctx, req.(*Request))
+		return srv.(TravelerServer).Node(ctx, req.(*NodeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
