@@ -186,7 +186,8 @@ func (NodeResource) Get(rw http.ResponseWriter, r *http.Request, ps httprouter.P
 	clusterName := ""
 
 	res := &NodeResponse{
-		GpuPods: make(map[string]int),
+		GpuPods:        make(map[string]int),
+		GpuPodForPrint: make(map[int]string),
 	}
 	node, err := kubeClient.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
